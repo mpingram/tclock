@@ -10,6 +10,12 @@ import (
 )
 
 func main() {
+
+	// TODO: read this in from config
+	DB_TYPE := "sqlite3"
+	DB_LOCATION := "./timeshifts.db"
+	data := timeshiftData{DB_TYPE, DB_LOCATION}
+
 	app := cli.NewApp()
 	app.Name = "tclock"
 	app.Usage = "Record the time you spend working on projects"
@@ -18,12 +24,14 @@ func main() {
 			Name:  "on",
 			Usage: "Start a timeshift for the specified project.",
 			Action: func(c *cli.Context) error {
-				clockOnTime := time.Now()
-				projectName, namespace := parseProject(c.Args().First())
-
-				project := projectStruct{projectName, namespace}
-				clockOnDataMessage := timeslotDataMessage{project: project, clockOnTime: clockOnTime}
-				sendData(clockOnDataMessage)
+				clockInTime := time.Now()
+				proj := parseProject(c.Args().First())
+				timeshiftClockIn := timeshift{project: proj, clockInTime: clockInTime}
+				err := data.clockIn(timeshiftClockIn)
+				if err != nil {
+					fmt.Println(err)
+					return err
+				}
 				return nil
 			},
 		},
@@ -31,12 +39,14 @@ func main() {
 			Name:  "off",
 			Usage: "End a timeshift for the specified project.",
 			Action: func(c *cli.Context) error {
-				clockOffTime := time.Now()
-				projectName, namespace := parseProject(c.Args().First())
-				project := projectStruct{projectName, namespace}
-				clockOffDataMessage := timeslotDataMessage{project: project, clockOffTime: clockOffTime}
-				sendData(clockOffDataMessage)
-				return nil
+				clockOutTime := time.Now()
+				proj := parseProject(c.Args().First())
+				timeshiftClockOut := timeshift{project: proj, clockOutTime: clockOutTime}
+				err := data.clockOut(timeshiftClockOut)
+				if err != nil {
+					fmt.Println(err)
+				}
+				return err
 			},
 		},
 		{
@@ -60,7 +70,8 @@ func main() {
 	app.Run(os.Args)
 }
 
-func parseProject(fullProjectStr string) (projectName, namespace string) {
+func parseProject(fullProjectStr string) project {
+	var projectName, namespace string
 	splitName := strings.SplitN(fullProjectStr, ".", 2)
 	if len(splitName) > 1 {
 		namespace = splitName[0]
@@ -72,5 +83,5 @@ func parseProject(fullProjectStr string) (projectName, namespace string) {
 		namespace = ""
 		projectName = "unnamed"
 	}
-	return
+	return project{projectName, namespace}
 }
