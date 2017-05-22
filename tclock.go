@@ -2,34 +2,50 @@ package main
 
 import (
 	"fmt"
+	"gopkg.in/urfave/cli.v1"
 	"os"
 	"strings"
 	"time"
-
-	"gopkg.in/urfave/cli.v1"
 )
 
 func main() {
 
 	// TODO: read this in from config
-	DB_TYPE := "sqlite3"
-	DB_LOCATION := "./timeshifts.db"
-	data := timeshiftData{DB_TYPE, DB_LOCATION}
+	db_type := "sqlite3"
+	db_location := "./timeshifts.db"
+	timeshiftsDB := timeshiftsDAO{db_type, db_location}
+
+	err := timeshiftsDB.init()
+	if err != nil {
+		panic(err)
+	}
 
 	app := cli.NewApp()
 	app.Name = "tclock"
 	app.Usage = "Record the time you spend working on projects"
 	app.Commands = []cli.Command{
 		{
+			Name:  "test",
+			Usage: "test",
+			Action: func(c *cli.Context) error {
+				err := timeshiftsDB.init()
+				fmt.Println(err)
+				return nil
+			},
+		},
+
+		{
 			Name:  "on",
 			Usage: "Start a timeshift for the specified project.",
 			Action: func(c *cli.Context) error {
 				clockInTime := time.Now()
 				proj := parseProject(c.Args().First())
-				timeshiftClockIn := timeshift{project: proj, clockInTime: clockInTime}
-				err := data.clockIn(timeshiftClockIn)
+				shift := timeshift{project: proj, clockInTime: clockInTime}
+				err := timeshiftsDB.clockIn(shift)
 				if err != nil {
-					fmt.Println(err)
+					printErr(err)
+					// DEV ONLY
+					panic(err)
 					return err
 				}
 				return nil
@@ -42,9 +58,9 @@ func main() {
 				clockOutTime := time.Now()
 				proj := parseProject(c.Args().First())
 				timeshiftClockOut := timeshift{project: proj, clockOutTime: clockOutTime}
-				err := data.clockOut(timeshiftClockOut)
+				err := timeshiftsDB.clockOut(timeshiftClockOut)
 				if err != nil {
-					fmt.Println(err)
+					printErr(err)
 				}
 				return err
 			},
@@ -84,4 +100,8 @@ func parseProject(fullProjectStr string) project {
 		projectName = "unnamed"
 	}
 	return project{projectName, namespace}
+}
+
+func printErr(err error) {
+	fmt.Println(err)
 }
