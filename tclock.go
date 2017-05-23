@@ -46,7 +46,7 @@ func main() {
 					printErr(err)
 					// DEV ONLY
 					panic(err)
-					return err
+					//return err
 				}
 				return nil
 			},
