@@ -12,7 +12,9 @@ type timeshiftsDAO struct {
 	dbFilepath string
 }
 
+// Call this before accessing the timeshift data.
 func (data timeshiftsDAO) init() error {
+	// create tables if not exist
 	db, err := sql.Open(data.dbDriver, data.dbFilepath)
 	dbPingErr := db.Ping()
 	defer db.Close()
@@ -64,52 +66,47 @@ func (data timeshiftsDAO) init() error {
 
 // register the beginning of a timeshift
 func (data timeshiftsDAO) clockIn(shift timeshift) error {
+
 	db, err := sql.Open(data.dbDriver, data.dbFilepath)
 	defer db.Close()
 	if err != nil {
 		return err
 	}
+	// DEBUG
+	rows, err := db.Query("Select * from projects")
+	if err != nil {
+		fmt.Println(err)
+	}
+	for rows.Next() {
+		var projectID int
+		var namespaceID sql.NullInt64
+		var name string
+		err = rows.Scan(&projectID, &namespaceID, &name)
+		if err != nil {
+			panic(err)
+		}
+		fmt.Println(projectID, namespaceID, name)
+
+	}
+	// END DEBUG
 	projectExists, projectID := getProjectID(db, shift.project.name, shift.project.namespace)
+
 	// create new project if not exists
 	if projectExists == false {
 		fmt.Println("Project dont exists yet")
-		createProjectStmt, err := db.Prepare(`INSERT INTO projects(name, namespace_id, project_id) VALUES (?,?,NULL)`)
+		// reassign projectID to newly created project
+		projectID, err = addProject(db, shift.project.name, shift.project.namespace)
+		fmt.Println(projectID)
 		if err != nil {
 			return err
 		}
-		projectHasNamespace := shift.project.namespace != ""
-		if projectHasNamespace == true {
-			namespaceExists, namespaceID := getNamespaceID(db, shift.project.namespace)
-			if namespaceExists == false {
-				_, err = db.Exec(`INSERT INTO namespaces(name, namespace_id) VALUES (?, NULL)`, shift.project.namespace)
-				if err != nil {
-					return err
-				}
-				namespaceExists, namespaceID = getNamespaceID(db, shift.project.namespace)
-				if namespaceExists == false {
-					panic("Namespace write failed")
-				}
-				fmt.Printf("%v : %v", shift.project.namespace, namespaceID)
-			}
-			_, err = createProjectStmt.Exec(shift.project.name, namespaceID)
-		} else {
-			_, err = createProjectStmt.Exec(shift.project.name, nil)
-		}
-		if err != nil {
-			return err
-		}
-		// reassign projectID to the newly created projectID
-		_, projectID = getProjectID(db, shift.project.name, shift.project.namespace)
 	}
 	// create new timeshift
-	createTimeshiftStmt, err := db.Prepare("INSERT INTO timeshifts(project_id, clock_in_time) VALUES (?,?)")
+	db.Exec("INSERT INTO timeshifts(project_id, clock_in_time) VALUES (?,?)", projectID, shift.clockInTime)
 	if err != nil {
 		return err
 	}
-	_, err = createTimeshiftStmt.Exec(projectID, shift.clockInTime)
-	if err != nil {
-		return err
-	}
+	// no error
 	return nil
 }
 
@@ -135,23 +132,61 @@ func (data timeshiftsDAO) getShifts(query timeshiftQuery) []timeshift {
 	return timeshifts
 }
 
+// helper function inserts new project into db
+func addProject(db *sql.DB, name string, namespace string) (int64, error) {
+	createProjectStmt, err := db.Prepare(`INSERT INTO projects(name, namespace_id, project_id) VALUES (?,?,NULL)`)
+	var res sql.Result
+	if err != nil {
+		return 0, err
+	}
+	projectHasNamespace := namespace != ""
+	if projectHasNamespace == true {
+		namespaceExists, namespaceID := getNamespaceID(db, namespace)
+		if namespaceExists == false {
+			_, err = db.Exec(`INSERT INTO namespaces(name, namespace_id) VALUES (?, NULL)`, namespace)
+			if err != nil {
+				return 0, err
+			}
+			namespaceExists, namespaceID = getNamespaceID(db, namespace)
+			if namespaceExists == false {
+				panic("Namespace write failed")
+			}
+			fmt.Printf("%v : %v", namespace, namespaceID)
+		}
+		res, err = createProjectStmt.Exec(name, namespaceID)
+	} else {
+		res, err = createProjectStmt.Exec(name, nil)
+	}
+	if err != nil {
+		return 0, err
+	}
+	projectID, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	return projectID, nil
+}
+
 // helper function finds projectID from name and namespace
-func getProjectID(db *sql.DB, name string, namespace string) (bool, int) {
+func getProjectID(db *sql.DB, name string, namespace string) (bool, int64) {
 	var exists bool
-	var id int
+	var id int64
 	hasNamespace := namespace != ""
 	queryString := `
 		  SELECT project_id FROM projects 
 		    INNER JOIN namespaces ON projects.namespace_id = namespaces.namespace_id 
 		  WHERE projects.name=? AND namespaces.name=?`
 	var err error
-	if hasNamespace == true {
+	fmt.Printf("namespace: %v\n", namespace)
+	if hasNamespace == false {
+		fmt.Println("has no namespace!")
 		err = db.QueryRow(queryString, name, nil).Scan(&id)
 	} else {
 		err = db.QueryRow(queryString, name, namespace).Scan(&id)
 	}
 	switch {
 	case err == sql.ErrNoRows:
+		fmt.Println("No rows found!")
 		exists = false
 	case err != nil:
 		panic(err)
