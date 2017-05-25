@@ -11,6 +11,7 @@ import (
 func main() {
 
 	// TODO: read this in from config
+	// TODO: custom error wrapper
 	db_type := "sqlite3"
 	db_location := "./timeshifts.db"
 	timeshiftsDB := timeshiftsDAO{db_type, db_location}
@@ -41,10 +42,11 @@ func main() {
 			Name:  "on",
 			Usage: "Start a timeshift for the specified project.",
 			Action: func(c *cli.Context) error {
+				forceOverwrite := false
 				clockOnTime := time.Now()
 				proj := parseProject(c.Args().First())
 				shift := timeshift{project: proj, clockOnTime: clockOnTime}
-				err := timeshiftsDB.clockOn(shift)
+				err := timeshiftsDB.clockOn(shift, forceOverwrite)
 				if err != nil {
 					return err
 				}
