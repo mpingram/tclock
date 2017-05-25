@@ -8,7 +8,7 @@ import (
 )
 
 // register the beginning of a timeshift
-func (data timeshiftsDAO) clockIn(shift timeshift) error {
+func (data timeshiftsDAO) clockOn(shift timeshift) error {
 	db, err := sql.Open(data.dbDriver, data.dbFilepath)
 	defer db.Close()
 	if err != nil {
@@ -27,7 +27,9 @@ func (data timeshiftsDAO) clockIn(shift timeshift) error {
 	}
 	fmt.Println(projectID)
 	// create new timeshift
-	db.Exec("INSERT INTO timeshifts(project_id, clock_in_time) VALUES (?,?)", projectID, shift.clockInTime)
+	fmt.Println(shift.clockOnTime)
+	clockOnTime := shift.clockOnTime.Unix()
+	db.Exec("INSERT INTO timeshifts(project_id, clock_on_time) VALUES (?,?)", projectID, clockOnTime)
 	if err != nil {
 		return err
 	}
@@ -36,12 +38,12 @@ func (data timeshiftsDAO) clockIn(shift timeshift) error {
 }
 
 // register the end of a timeshift
-func (data timeshiftsDAO) clockOut(shift timeshift) error {
+func (data timeshiftsDAO) clockOff(shift timeshift) error {
 	// find projectID
 	return nil
 }
 
-func (data timeshiftsDAO) editTimeshift(targetProject project, newClockInTime time.Time, newClockOutTime time.Time) error {
+func (data timeshiftsDAO) editTimeshift(targetProject project, newClockOnTime time.Time, newClockOffTime time.Time) error {
 	// TODO: implement me
 	return nil
 }
@@ -145,16 +147,19 @@ func (data timeshiftsDAO) printDB() error {
 		return err
 	}
 	fmt.Println("==== timeshifts ====")
-	fmt.Println("timeshift_id\tproject_id\tclock_in_time\tclock_out_time")
+	fmt.Println("timeshift_id\tproject_id\tclock_on_time\tclock_off_time")
 	timeshifts, err := db.Query("SELECT * FROM timeshifts")
 	if err != nil {
 		panic(err)
 	}
 	for timeshifts.Next() {
 		var timeshiftID, projectID int64
-		var clockInTime, clockOutTime time.Time
-		timeshifts.Scan(&timeshiftID, &projectID, &clockInTime, &clockOutTime)
-		fmt.Printf("%v\t\t%v\t%v\t%v\n", timeshiftID, projectID, clockInTime, clockOutTime)
+		var clockOnTimeUnix, clockOffTimeUnix int64
+		var clockOnTime, clockOffTime time.Time
+		timeshifts.Scan(&timeshiftID, &projectID, &clockOnTimeUnix, &clockOffTimeUnix)
+		clockOnTime = time.Unix(clockOnTimeUnix, 0)
+		clockOffTime = time.Unix(clockOffTimeUnix, 0)
+		fmt.Printf("%v\t\t%v\t%v\t%v\n", timeshiftID, projectID, clockOnTime, clockOffTime)
 	}
 	fmt.Println("==== projects ====")
 	fmt.Println("project_id\tnamespace_id\tname")
@@ -241,8 +246,8 @@ func (data timeshiftsDAO) init() error {
 		CREATE TABLE IF NOT EXISTS timeshifts ( 
 			timeshift_id INTEGER PRIMARY KEY,
 			project_id INTEGER,
-			clock_in_time INTEGER,
-			clock_out_time INTEGER,
+			clock_on_time INTEGER,
+			clock_off_time INTEGER,
 			FOREIGN KEY (project_id) REFERENCES projects(project_id)
 		)
 	`)
@@ -264,8 +269,8 @@ type timeshiftsDAO struct {
 
 type timeshift struct {
 	project      project
-	clockInTime  time.Time
-	clockOutTime time.Time
+	clockOnTime  time.Time
+	clockOffTime time.Time
 }
 
 type timeshiftQuery struct {

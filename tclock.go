@@ -25,8 +25,9 @@ func main() {
 	app.Usage = "Record the time you spend working on projects"
 	app.Commands = []cli.Command{
 		{
-			Name:  "dump-db",
-			Usage: "test",
+			Name:    "report",
+			Aliases: []string{"r"},
+			Usage:   "Show active and previous timeshifts.",
 			Action: func(c *cli.Context) error {
 				err := timeshiftsDB.printDB()
 				if err != nil {
@@ -40,15 +41,12 @@ func main() {
 			Name:  "on",
 			Usage: "Start a timeshift for the specified project.",
 			Action: func(c *cli.Context) error {
-				clockInTime := time.Now()
+				clockOnTime := time.Now()
 				proj := parseProject(c.Args().First())
-				shift := timeshift{project: proj, clockInTime: clockInTime}
-				err := timeshiftsDB.clockIn(shift)
+				shift := timeshift{project: proj, clockOnTime: clockOnTime}
+				err := timeshiftsDB.clockOn(shift)
 				if err != nil {
-					printErr(err)
-					// DEV ONLY
-					panic(err)
-					//return err
+					return err
 				}
 				return nil
 			},
@@ -57,10 +55,10 @@ func main() {
 			Name:  "off",
 			Usage: "End a timeshift for the specified project.",
 			Action: func(c *cli.Context) error {
-				clockOutTime := time.Now()
+				clockOffTime := time.Now()
 				proj := parseProject(c.Args().First())
-				timeshiftClockOut := timeshift{project: proj, clockOutTime: clockOutTime}
-				err := timeshiftsDB.clockOut(timeshiftClockOut)
+				timeshiftClockOff := timeshift{project: proj, clockOffTime: clockOffTime}
+				err := timeshiftsDB.clockOff(timeshiftClockOff)
 				if err != nil {
 					printErr(err)
 				}
