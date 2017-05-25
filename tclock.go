@@ -70,7 +70,6 @@ func main() {
 			Aliases: []string{"s"},
 			Usage:   "Show the currently active timeshifts and how long they've been running.",
 			Action: func(c *cli.Context) error {
-				fmt.Println("Implement me.")
 				return nil
 			},
 		},

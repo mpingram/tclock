@@ -73,34 +73,35 @@ func (data timeshiftsDAO) clockIn(shift timeshift) error {
 		return err
 	}
 	// DEBUG
-	rows, err := db.Query("Select * from projects")
-	if err != nil {
-		fmt.Println(err)
-	}
-	for rows.Next() {
-		var projectID int
-		var namespaceID sql.NullInt64
-		var name string
-		err = rows.Scan(&projectID, &namespaceID, &name)
-		if err != nil {
-			panic(err)
-		}
-		fmt.Println(projectID, namespaceID, name)
-
-	}
+	//	rows, err := db.Query("Select * from projects")
+	//	if err != nil {
+	//		fmt.Println(err)
+	//	}
+	//	for rows.Next() {
+	//		var projectID int
+	//		var namespaceID sql.NullInt64
+	//		var name string
+	//		err = rows.Scan(&projectID, &namespaceID, &name)
+	//		if err != nil {
+	//			panic(err)
+	//		}
+	//		fmt.Println(projectID, namespaceID, name)
+	//
+	//	}
 	// END DEBUG
 	projectExists, projectID := getProjectID(db, shift.project.name, shift.project.namespace)
 
 	// create new project if not exists
 	if projectExists == false {
-		fmt.Println("Project dont exists yet")
+		fmt.Printf("Creating new project %v.%v\n", shift.project.namespace, shift.project.name)
 		// reassign projectID to newly created project
+		// TODO: handle namespaces more elegantly
 		projectID, err = addProject(db, shift.project.name, shift.project.namespace)
-		fmt.Println(projectID)
 		if err != nil {
 			return err
 		}
 	}
+	fmt.Println(projectID)
 	// create new timeshift
 	db.Exec("INSERT INTO timeshifts(project_id, clock_in_time) VALUES (?,?)", projectID, shift.clockInTime)
 	if err != nil {
@@ -173,7 +174,6 @@ func getProjectID(db *sql.DB, name string, namespace string) (bool, int64) {
 	var id int64
 	hasNamespace := namespace != ""
 	var err error
-	fmt.Printf("namespace: %v\n", namespace)
 	if hasNamespace == false {
 		fmt.Println("has no namespace!")
 		queryString := `
@@ -181,6 +181,7 @@ func getProjectID(db *sql.DB, name string, namespace string) (bool, int64) {
 			WHERE projects.name=? AND projects.namespace_id IS NULL`
 		err = db.QueryRow(queryString, name).Scan(&id)
 	} else {
+		fmt.Printf("namespace: %v\n", namespace)
 		queryString := `
 				SELECT project_id FROM projects 
 					INNER JOIN namespaces ON projects.namespace_id = namespaces.namespace_id 
@@ -206,7 +207,7 @@ func getNamespaceID(db *sql.DB, namespace string) (bool, int) {
 	queryString := `
     SELECT namespace_id from namespaces
 		WHERE name=? 
-		LIMIT 1"`
+		LIMIT 1`
 	err := db.QueryRow(queryString, namespace).Scan(&id)
 	switch {
 	case err == sql.ErrNoRows:
