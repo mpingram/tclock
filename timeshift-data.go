@@ -172,16 +172,19 @@ func getProjectID(db *sql.DB, name string, namespace string) (bool, int64) {
 	var exists bool
 	var id int64
 	hasNamespace := namespace != ""
-	queryString := `
-		  SELECT project_id FROM projects 
-		    INNER JOIN namespaces ON projects.namespace_id = namespaces.namespace_id 
-		  WHERE projects.name=? AND namespaces.name=?`
 	var err error
 	fmt.Printf("namespace: %v\n", namespace)
 	if hasNamespace == false {
 		fmt.Println("has no namespace!")
-		err = db.QueryRow(queryString, name, nil).Scan(&id)
+		queryString := `
+			SELECT project_id FROM projects
+			WHERE projects.name=? AND projects.namespace_id IS NULL`
+		err = db.QueryRow(queryString, name).Scan(&id)
 	} else {
+		queryString := `
+				SELECT project_id FROM projects 
+					INNER JOIN namespaces ON projects.namespace_id = namespaces.namespace_id 
+				WHERE projects.name=? AND namespaces.name=?`
 		err = db.QueryRow(queryString, name, namespace).Scan(&id)
 	}
 	switch {
