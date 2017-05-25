@@ -57,6 +57,23 @@ func (data timeshiftsDAO) getShifts(query timeshiftQuery) []timeshift {
 	return timeshifts
 }
 
+// helper function inserts new namespace into db
+func addNamespace(db *sql.DB, namespace string) (int64, error) {
+	createNamespaceStmt, err := db.Prepare(`INSERT INTO namespaces(name, namespace_id) VALUES (?, NULL)`)
+	if err != nil {
+		return 0, err
+	}
+	res, err := createNamespaceStmt.Exec(namespace)
+	if err != nil {
+		return 0, err
+	}
+	namespaceID, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	return namespaceID, nil
+}
+
 // helper function inserts new project into db
 func addProject(db *sql.DB, name string, namespace string) (int64, error) {
 	createProjectStmt, err := db.Prepare(`INSERT INTO projects(name, namespace_id, project_id) VALUES (?,?,NULL)`)
@@ -68,15 +85,12 @@ func addProject(db *sql.DB, name string, namespace string) (int64, error) {
 	if projectHasNamespace == true {
 		namespaceExists, namespaceID := getNamespaceID(db, namespace)
 		if namespaceExists == false {
-			_, err = db.Exec(`INSERT INTO namespaces(name, namespace_id) VALUES (?, NULL)`, namespace)
+			// reassign namespaceID to newly created value
+			namespaceID, err = addNamespace(db, namespace)
 			if err != nil {
 				return 0, err
 			}
-			namespaceExists, namespaceID = getNamespaceID(db, namespace)
-			if namespaceExists == false {
-				panic("Namespace write failed")
-			}
-			fmt.Printf("%v : %v", namespace, namespaceID)
+			fmt.Printf("%v:%v", namespace, namespaceID)
 		}
 		res, err = createProjectStmt.Exec(name, namespaceID)
 	} else {
@@ -140,7 +154,7 @@ func (data timeshiftsDAO) printDB() error {
 		var timeshiftID, projectID int64
 		var clockInTime, clockOutTime time.Time
 		timeshifts.Scan(&timeshiftID, &projectID, &clockInTime, &clockOutTime)
-		fmt.Printf("%v\t%v\t%v\t%v\n", timeshiftID, projectID, clockInTime, clockOutTime)
+		fmt.Printf("%v\t\t%v\t%v\t%v\n", timeshiftID, projectID, clockInTime, clockOutTime)
 	}
 	fmt.Println("==== projects ====")
 	fmt.Println("project_id\tnamespace_id\tname")
@@ -153,11 +167,11 @@ func (data timeshiftsDAO) printDB() error {
 		var namespaceID sql.NullInt64
 		var name string
 		projects.Scan(&projectID, &namespaceID, &name)
-		fmt.Printf("%v\t%v\t%v\n", projectID, namespaceID, name)
+		fmt.Printf("%v\t\t%v\t%v\n", projectID, namespaceID, name)
 	}
 	fmt.Println("==== namespaces ====")
 	fmt.Println("namespace_id\tname")
-	namespaces, err := db.Query("SELECT * FROM projects")
+	namespaces, err := db.Query("SELECT * FROM namespaces")
 	if err != nil {
 		panic(err)
 	}
@@ -165,15 +179,13 @@ func (data timeshiftsDAO) printDB() error {
 		var namespaceID int64
 		var name string
 		namespaces.Scan(&namespaceID, &name)
-		fmt.Printf("%v\t%v\n", namespaceID, name)
+		fmt.Printf("%v\t\t%v\n", namespaceID, name)
 	}
 	return nil
 }
 
 // helper function finds namespaceId from namespace
-func getNamespaceID(db *sql.DB, namespace string) (bool, int) {
-	var exists bool
-	var id int
+func getNamespaceID(db *sql.DB, namespace string) (exists bool, id int64) {
 	queryString := `
     SELECT namespace_id from namespaces
 		WHERE name=? 
