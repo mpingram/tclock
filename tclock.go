@@ -25,11 +25,13 @@ func main() {
 	app.Usage = "Record the time you spend working on projects"
 	app.Commands = []cli.Command{
 		{
-			Name:  "test",
+			Name:  "dump-db",
 			Usage: "test",
 			Action: func(c *cli.Context) error {
-				err := timeshiftsDB.init()
-				fmt.Println(err)
+				err := timeshiftsDB.printDB()
+				if err != nil {
+					panic(err)
+				}
 				return nil
 			},
 		},

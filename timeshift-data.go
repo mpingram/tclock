@@ -7,90 +7,14 @@ import (
 	"time"
 )
 
-type timeshiftsDAO struct {
-	dbDriver   string
-	dbFilepath string
-}
-
-// Call this before accessing the timeshift data.
-func (data timeshiftsDAO) init() error {
-	// create tables if not exist
-	db, err := sql.Open(data.dbDriver, data.dbFilepath)
-	dbPingErr := db.Ping()
-	defer db.Close()
-	if err != nil {
-		return err
-	}
-	if db == nil {
-		panic("db nil")
-	}
-	if dbPingErr != nil {
-		panic(dbPingErr)
-	}
-
-	_, err = db.Exec(`
-		CREATE TABLE IF NOT EXISTS namespaces (
-			namespace_id INTEGER PRIMARY KEY,
-			name TEXT
-		)
-	`)
-	if err != nil {
-		return err
-	}
-	_, err = db.Exec(`
-		CREATE TABLE IF NOT EXISTS projects (
-			project_id INTEGER PRIMARY KEY,
-			namespace_id INTEGER,
-			name TEXT,
-			FOREIGN KEY (namespace_id) REFERENCES namespaces(namespace_id)
-		)
-	`)
-	if err != nil {
-		return err
-	}
-	_, err = db.Exec(`
-		CREATE TABLE IF NOT EXISTS timeshifts ( 
-			id INTEGER PRIMARY KEY,
-			project_id INTEGER,
-			clock_in_time INTEGER,
-			clock_out_time INTEGER,
-			FOREIGN KEY (project_id) REFERENCES projects(project_id)
-		)
-	`)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 // register the beginning of a timeshift
 func (data timeshiftsDAO) clockIn(shift timeshift) error {
-
 	db, err := sql.Open(data.dbDriver, data.dbFilepath)
 	defer db.Close()
 	if err != nil {
 		return err
 	}
-	// DEBUG
-	//	rows, err := db.Query("Select * from projects")
-	//	if err != nil {
-	//		fmt.Println(err)
-	//	}
-	//	for rows.Next() {
-	//		var projectID int
-	//		var namespaceID sql.NullInt64
-	//		var name string
-	//		err = rows.Scan(&projectID, &namespaceID, &name)
-	//		if err != nil {
-	//			panic(err)
-	//		}
-	//		fmt.Println(projectID, namespaceID, name)
-	//
-	//	}
-	// END DEBUG
 	projectExists, projectID := getProjectID(db, shift.project.name, shift.project.namespace)
-
 	// create new project if not exists
 	if projectExists == false {
 		fmt.Printf("Creating new project %v.%v\n", shift.project.namespace, shift.project.name)
@@ -200,6 +124,52 @@ func getProjectID(db *sql.DB, name string, namespace string) (bool, int64) {
 	return exists, id
 }
 
+// DEBUG
+func (data timeshiftsDAO) printDB() error {
+	db, err := sql.Open(data.dbDriver, data.dbFilepath)
+	if err != nil {
+		return err
+	}
+	fmt.Println("==== timeshifts ====")
+	fmt.Println("timeshift_id\tproject_id\tclock_in_time\tclock_out_time")
+	timeshifts, err := db.Query("SELECT * FROM timeshifts")
+	if err != nil {
+		panic(err)
+	}
+	for timeshifts.Next() {
+		var timeshiftID, projectID int64
+		var clockInTime, clockOutTime time.Time
+		timeshifts.Scan(&timeshiftID, &projectID, &clockInTime, &clockOutTime)
+		fmt.Printf("%v\t%v\t%v\t%v\n", timeshiftID, projectID, clockInTime, clockOutTime)
+	}
+	fmt.Println("==== projects ====")
+	fmt.Println("project_id\tnamespace_id\tname")
+	projects, err := db.Query("SELECT * FROM projects")
+	if err != nil {
+		panic(err)
+	}
+	for projects.Next() {
+		var projectID int64
+		var namespaceID sql.NullInt64
+		var name string
+		projects.Scan(&projectID, &namespaceID, &name)
+		fmt.Printf("%v\t%v\t%v\n", projectID, namespaceID, name)
+	}
+	fmt.Println("==== namespaces ====")
+	fmt.Println("namespace_id\tname")
+	namespaces, err := db.Query("SELECT * FROM projects")
+	if err != nil {
+		panic(err)
+	}
+	for namespaces.Next() {
+		var namespaceID int64
+		var name string
+		namespaces.Scan(&namespaceID, &name)
+		fmt.Printf("%v\t%v\n", namespaceID, name)
+	}
+	return nil
+}
+
 // helper function finds namespaceId from namespace
 func getNamespaceID(db *sql.DB, namespace string) (bool, int) {
 	var exists bool
@@ -220,9 +190,64 @@ func getNamespaceID(db *sql.DB, namespace string) (bool, int) {
 	return exists, id
 }
 
+// Call this before accessing the timeshift data.
+func (data timeshiftsDAO) init() error {
+	// create tables if not exist
+	db, err := sql.Open(data.dbDriver, data.dbFilepath)
+	dbPingErr := db.Ping()
+	defer db.Close()
+	if err != nil {
+		return err
+	}
+	if db == nil {
+		panic("db nil")
+	}
+	if dbPingErr != nil {
+		panic(dbPingErr)
+	}
+	_, err = db.Exec(`
+		CREATE TABLE IF NOT EXISTS namespaces (
+			namespace_id INTEGER PRIMARY KEY,
+			name TEXT
+		)
+	`)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(`
+		CREATE TABLE IF NOT EXISTS projects (
+			project_id INTEGER PRIMARY KEY,
+			namespace_id INTEGER,
+			name TEXT,
+			FOREIGN KEY (namespace_id) REFERENCES namespaces(namespace_id)
+		)
+	`)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(`
+		CREATE TABLE IF NOT EXISTS timeshifts ( 
+			timeshift_id INTEGER PRIMARY KEY,
+			project_id INTEGER,
+			clock_in_time INTEGER,
+			clock_out_time INTEGER,
+			FOREIGN KEY (project_id) REFERENCES projects(project_id)
+		)
+	`)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 type project struct {
 	name      string
 	namespace string
+}
+
+type timeshiftsDAO struct {
+	dbDriver   string
+	dbFilepath string
 }
 
 type timeshift struct {
