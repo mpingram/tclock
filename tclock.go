@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/mpingram/tclock/timeshifts"
 	"gopkg.in/urfave/cli.v1"
 	"os"
 	"strings"
@@ -14,9 +15,9 @@ func main() {
 	// TODO: custom error wrapper
 	db_type := "sqlite3"
 	db_location := "./timeshifts.db"
-	timeshiftsDB := timeshiftsDAO{db_type, db_location}
+	timeshiftsDB := timeshifts.DB{db_type, db_location}
 
-	err := timeshiftsDB.init()
+	err := timeshiftsDB.Init()
 	if err != nil {
 		panic(err)
 	}
@@ -30,7 +31,7 @@ func main() {
 			Aliases: []string{"r"},
 			Usage:   "Show active and previous timeshifts.",
 			Action: func(c *cli.Context) error {
-				err := timeshiftsDB.printDB()
+				err := timeshiftsDB.PrintDB()
 				if err != nil {
 					panic(err)
 				}
@@ -45,8 +46,8 @@ func main() {
 				forceOverwrite := false
 				clockOnTime := time.Now()
 				proj := parseProject(c.Args().First())
-				shift := timeshift{project: proj, clockOnTime: clockOnTime}
-				err := timeshiftsDB.clockOn(shift, forceOverwrite)
+				shift := timeshifts.Timeshift{Project: proj, ClockOnTime: clockOnTime}
+				err := timeshiftsDB.ClockOn(shift, forceOverwrite)
 				if err != nil {
 					return err
 				}
@@ -59,8 +60,8 @@ func main() {
 			Action: func(c *cli.Context) error {
 				clockOffTime := time.Now()
 				proj := parseProject(c.Args().First())
-				timeshiftClockOff := timeshift{project: proj, clockOffTime: clockOffTime}
-				err := timeshiftsDB.clockOff(timeshiftClockOff)
+				timeshiftClockOff := timeshifts.Timeshift{Project: proj, ClockOffTime: clockOffTime}
+				err := timeshiftsDB.ClockOff(timeshiftClockOff)
 				if err != nil {
 					printErr(err)
 				}
@@ -87,7 +88,7 @@ func main() {
 	app.Run(os.Args)
 }
 
-func parseProject(fullProjectStr string) project {
+func parseProject(fullProjectStr string) timeshifts.Project {
 	var projectName, namespace string
 	splitName := strings.SplitN(fullProjectStr, ".", 2)
 	if len(splitName) > 1 {
@@ -100,7 +101,7 @@ func parseProject(fullProjectStr string) project {
 		namespace = ""
 		projectName = "unnamed"
 	}
-	return project{projectName, namespace}
+	return timeshifts.Project{projectName, namespace}
 }
 
 func printErr(err error) {

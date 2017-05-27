@@ -1,4 +1,4 @@
-package main
+package timeshifts
 
 import (
 	"database/sql"
@@ -8,18 +8,18 @@ import (
 )
 
 // register the beginning of a timeshift
-func (data timeshiftsDAO) clockOn(shift timeshift, forceOverwrite bool) error {
-	db, err := sql.Open(data.dbDriver, data.dbFilepath)
+func (dbRef DB) ClockOn(shift Timeshift, forceOverwrite bool) error {
+	db, err := sql.Open(dbRef.DbDriver, dbRef.DbFilepath)
 	defer db.Close()
 	if err != nil {
 		return err
 	}
-	projectExists, projectID, err := getProjectID(db, shift.project)
+	projectExists, projectID, err := getProjectID(db, shift.Project)
 	if err != nil {
 		return err
 	}
 	if projectExists == false {
-		projectID, err = addProject(db, shift.project.name, shift.project.namespace)
+		projectID, err = addProject(db, shift.Project.Name, shift.Project.Namespace)
 		if err != nil {
 			return err
 		}
@@ -34,7 +34,7 @@ func (data timeshiftsDAO) clockOn(shift timeshift, forceOverwrite bool) error {
 		return ErrTimeshiftAlreadyRunning(prevTimeshift)
 	}
 	// create new timeshift
-	clockOnTime := shift.clockOnTime.Unix()
+	clockOnTime := shift.ClockOnTime.Unix()
 	_, err = db.Exec("INSERT INTO timeshifts(project_id, clock_on_time) VALUES (?,?)", projectID, clockOnTime)
 	if err != nil {
 		return err
@@ -43,31 +43,31 @@ func (data timeshiftsDAO) clockOn(shift timeshift, forceOverwrite bool) error {
 }
 
 // register the end of a timeshift
-func (data timeshiftsDAO) clockOff(shift timeshift) error {
+func (dbRef DB) ClockOff(shift Timeshift) error {
 	// find projectID
 	return nil
 }
 
-func (data timeshiftsDAO) editTimeshift(targetProject project, newClockOnTime time.Time, newClockOffTime time.Time) error {
+func (dbRef DB) EditTimeshift(targetProject Project, newClockOnTime time.Time, newClockOffTime time.Time) error {
 	// TODO: implement me
 	return nil
 }
 
-func (data timeshiftsDAO) editProject(targetProject, newProject project) error {
+func (dbRef DB) EditProject(targetProject, newProject Project) error {
 	// TODO: implement me
 	return nil
 }
 
 // returns all timeshifts associated with the passed project
-func (data timeshiftsDAO) getShifts(query timeshiftQuery) []timeshift {
-	var timeshifts []timeshift
+func (dbRef DB) GetShifts(query TimeshiftQuery) []Timeshift {
+	var timeshifts []Timeshift
 	return timeshifts
 }
 
 // helper function checks if there is an unclosed timeshift for shift's project
-func isTimeshiftAlreadyRunning(db *sql.DB, shift timeshift) (bool, timeshift, error) {
-	var prevShift timeshift
-	exists, projectID, err := getProjectID(db, shift.project)
+func isTimeshiftAlreadyRunning(db *sql.DB, shift Timeshift) (bool, Timeshift, error) {
+	var prevShift Timeshift
+	exists, projectID, err := getProjectID(db, shift.Project)
 	if exists == false {
 		return false, prevShift, nil
 	} else if err != nil {
@@ -95,15 +95,15 @@ func isTimeshiftAlreadyRunning(db *sql.DB, shift timeshift) (bool, timeshift, er
 			return false, prevShift, err
 		default:
 			fmt.Println("Timeshift IS already running.")
-			var proj project
+			var proj Project
 			if maybeNamespace.Valid == true {
 				namespace := maybeNamespace.String
-				proj = project{name, namespace}
+				proj = Project{Name: name, Namespace: namespace}
 			} else {
-				proj = project{name: name}
+				proj = Project{Name: name}
 			}
 			clockOnTime := time.Unix(clockOnTimeUnix, 0)
-			prevShift = timeshift{project: proj, clockOnTime: clockOnTime}
+			prevShift = Timeshift{Project: proj, ClockOnTime: clockOnTime}
 			return true, prevShift, nil
 		}
 	}
@@ -159,21 +159,21 @@ func addProject(db *sql.DB, name string, namespace string) (int64, error) {
 }
 
 // helper function finds projectID from name and namespace
-func getProjectID(db *sql.DB, proj project) (exists bool, id int64, err error) {
-	hasNamespace := proj.namespace != ""
+func getProjectID(db *sql.DB, proj Project) (exists bool, id int64, err error) {
+	hasNamespace := proj.Namespace != ""
 	if hasNamespace == false {
 		fmt.Println("has no namespace!")
 		queryString := `
 			SELECT project_id FROM projects
 			WHERE projects.name=? AND projects.namespace_id IS NULL`
-		err = db.QueryRow(queryString, proj.name).Scan(&id)
+		err = db.QueryRow(queryString, proj.Name).Scan(&id)
 	} else {
-		fmt.Printf("namespace: %v\n", proj.namespace)
+		fmt.Printf("namespace: %v\n", proj.Namespace)
 		queryString := `
 				SELECT project_id FROM projects 
 					INNER JOIN namespaces ON projects.namespace_id = namespaces.namespace_id 
 				WHERE projects.name=? AND namespaces.name=?`
-		err = db.QueryRow(queryString, proj.name, proj.namespace).Scan(&id)
+		err = db.QueryRow(queryString, proj.Name, proj.Namespace).Scan(&id)
 	}
 	switch {
 	case err == sql.ErrNoRows:
@@ -192,8 +192,8 @@ func getProjectID(db *sql.DB, proj project) (exists bool, id int64, err error) {
 }
 
 // DEBUG
-func (data timeshiftsDAO) printDB() error {
-	db, err := sql.Open(data.dbDriver, data.dbFilepath)
+func (dbRef DB) PrintDB() error {
+	db, err := sql.Open(dbRef.DbDriver, dbRef.DbFilepath)
 	if err != nil {
 		return err
 	}
@@ -259,9 +259,9 @@ func getNamespaceID(db *sql.DB, namespace string) (exists bool, id int64) {
 }
 
 // Call this before accessing the timeshift data.
-func (data timeshiftsDAO) init() error {
+func (dbRef DB) Init() error {
 	// create tables if not exist
-	db, err := sql.Open(data.dbDriver, data.dbFilepath)
+	db, err := sql.Open(dbRef.DbDriver, dbRef.DbFilepath)
 	dbPingErr := db.Ping()
 	defer db.Close()
 	if err != nil {
@@ -309,41 +309,41 @@ func (data timeshiftsDAO) init() error {
 }
 
 // helper function formats the namespace + name output of a timeshift
-func formatName(shift timeshift) string {
-	if shift.project.namespace == "" {
-		return shift.project.name
+func formatName(shift Timeshift) string {
+	if shift.Project.Namespace == "" {
+		return shift.Project.Name
 	} else {
-		return shift.project.namespace + "." + shift.project.name
+		return shift.Project.Namespace + "." + shift.Project.Name
 	}
 }
 
-type project struct {
-	name      string
-	namespace string
+type Project struct {
+	Name      string
+	Namespace string
 }
 
-type timeshiftsDAO struct {
-	dbDriver   string
-	dbFilepath string
+type DB struct {
+	DbDriver   string
+	DbFilepath string
 }
 
-type timeshift struct {
-	project      project
-	clockOnTime  time.Time
-	clockOffTime time.Time
+type Timeshift struct {
+	Project      Project
+	ClockOnTime  time.Time
+	ClockOffTime time.Time
 }
 
-type timeshiftQuery struct {
-	projectName string
-	namespace   string
-	from        time.Time
-	to          time.Time
+type TimeshiftQuery struct {
+	ProjectName string
+	Namespace   string
+	From        time.Time
+	To          time.Time
 }
 
-type ErrTimeshiftAlreadyRunning timeshift
+type ErrTimeshiftAlreadyRunning Timeshift
 
 func (e ErrTimeshiftAlreadyRunning) Error() string {
-	originalShift := timeshift(e)
+	originalShift := Timeshift(e)
 	outputStr := "There is already a running timeshift for project %v: previous timeshift started at %v.\n"
-	return fmt.Sprintf(outputStr, formatName(originalShift), originalShift.clockOnTime)
+	return fmt.Sprintf(outputStr, formatName(originalShift), originalShift.ClockOnTime)
 }
