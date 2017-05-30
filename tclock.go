@@ -5,8 +5,6 @@ import (
 	"github.com/mpingram/tclock/timeshifts"
 	"gopkg.in/urfave/cli.v1"
 	"os"
-	"strings"
-	"time"
 )
 
 func main() {
@@ -21,6 +19,9 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
+	log := logger{}
+	shortTimeFormat := "Jan 2 3:04pm"
 
 	app := cli.NewApp()
 	app.Name = "tclock"
@@ -44,13 +45,16 @@ func main() {
 			Usage: "Start a timeshift for the specified project.",
 			Action: func(c *cli.Context) error {
 				forceOverwrite := false
-				clockOnTime := time.Now()
-				proj := parseProject(c.Args().First())
-				shift := timeshifts.Timeshift{Project: proj, ClockOnTime: clockOnTime}
-				err := timeshiftsDB.ClockOn(shift, forceOverwrite)
+				proj, err := parseProject(c.Args().First())
 				if err != nil {
 					return err
 				}
+				shift, err := timeshiftsDB.ClockOn(proj, forceOverwrite)
+				if err != nil {
+					log.e(err.Error())
+					return err
+				}
+				log.i("Project %v clocked on: %v", c.Args().First(), shift.ClockOnTime.Format(shortTimeFormat))
 				return nil
 			},
 		},
@@ -58,14 +62,70 @@ func main() {
 			Name:  "off",
 			Usage: "End a timeshift for the specified project.",
 			Action: func(c *cli.Context) error {
-				clockOffTime := time.Now()
-				proj := parseProject(c.Args().First())
-				timeshiftClockOff := timeshifts.Timeshift{Project: proj, ClockOffTime: clockOffTime}
-				err := timeshiftsDB.ClockOff(timeshiftClockOff)
-				if err != nil {
-					printErr(err)
+				noProject := false
+				proj, err := parseProject(c.Args().First())
+				switch {
+				case err == ErrEmptyProject:
+					noProject = true
+				case err != nil:
+					return err
 				}
-				return err
+				// get a list of all running timeshifts
+				runningShifts, err := timeshiftsDB.GetRunningShifts()
+				switch {
+				// if there are no running timeshifts, throw err
+				case err == timeshifts.ErrNoTimeshifts:
+					log.e(err.Error())
+					return nil
+				case err != nil:
+					log.e(err.Error())
+					return err
+				// if there is one running timeshift, and no specific project
+				//  was passed to tclock off, clock off that project
+				case len(runningShifts) == 1 && noProject == true:
+					shift := runningShifts[0]
+					shift, err = timeshiftsDB.ClockOff(shift.Project)
+					if err != nil {
+						return err
+					}
+					log.i("Project %v clocked off: %v, ran for %v",
+						timeshifts.FormatProject(shift.Project),
+						shift.ClockOffTime.Format(shortTimeFormat),
+						shift.ClockOffTime.Sub(shift.ClockOnTime),
+					)
+					return nil
+					// if there are multiple running timeshifts and no
+					//   specific project was passed to tclock off, print a
+					//   list of all running timeshifts
+				case len(runningShifts) > 1 && noProject == true:
+					outputStr := "Multiple running timeshifts:\n"
+					outputStr += listTimeshifts(runningShifts)
+					outputStr += "Clock off one of these shifts by calling tclock off <project>"
+					log.i(outputStr)
+					return nil
+				// if a project has been passed to tclock off, clock off that project
+				//   if it's running
+				default:
+					shift, err := timeshiftsDB.ClockOff(proj)
+					switch {
+					case err == timeshifts.ErrNoTimeshifts:
+						outputStr := fmt.Sprintf("No running timeshift for project %v.\n", timeshifts.FormatProject(proj))
+						outputStr += "Here is a list of all running timeshifts:\n"
+						outputStr += listTimeshifts(runningShifts)
+						log.i(outputStr)
+						return nil
+					case err != nil:
+						return err
+					default:
+						log.i("Shift %v clocked out: %v. Ran for %v [%v - %v]",
+							timeshifts.FormatProject(proj),
+							shift.ClockOffTime.Format(shortTimeFormat),
+							shift.ClockOnTime.Format("03:04pm"),
+							shift.ClockOffTime.Format("03:04pm"),
+						)
+					}
+					return nil
+				}
 			},
 		},
 		{
@@ -86,24 +146,4 @@ func main() {
 		},
 	}
 	app.Run(os.Args)
-}
-
-func parseProject(fullProjectStr string) timeshifts.Project {
-	var projectName, namespace string
-	splitName := strings.SplitN(fullProjectStr, ".", 2)
-	if len(splitName) > 1 {
-		namespace = splitName[0]
-		projectName = splitName[1]
-	} else if len(splitName) == 1 {
-		namespace = ""
-		projectName = fullProjectStr
-	} else {
-		namespace = ""
-		projectName = "unnamed"
-	}
-	return timeshifts.Project{projectName, namespace}
-}
-
-func printErr(err error) {
-	fmt.Println(err)
 }
