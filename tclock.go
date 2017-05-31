@@ -5,12 +5,13 @@ import (
 	"github.com/mpingram/tclock/timeshifts"
 	"gopkg.in/urfave/cli.v1"
 	"os"
+	"text/tabwriter"
+	"time"
 )
 
 func main() {
 
 	// TODO: read this in from config
-	// TODO: custom error wrapper
 	db_type := "sqlite3"
 	db_location := "./timeshifts.db"
 	timeshiftsDB := timeshifts.DB{db_type, db_location}
@@ -35,6 +36,36 @@ func main() {
 				err := timeshiftsDB.PrintDB()
 				if err != nil {
 					panic(err)
+				}
+				return nil
+			},
+		},
+		{
+			Name:    "status",
+			Aliases: []string{"s"},
+			Usage:   "List all currently running timeshifts.",
+			Action: func(c *cli.Context) error {
+				shifts, err := timeshiftsDB.GetRunningShifts()
+				switch {
+				case err == timeshifts.ErrNoTimeshifts:
+					log.i("No running timeshifts.")
+				case err != nil:
+					panic(err)
+				default:
+					fmt.Print("\n")
+					log.i("Running timeshifts:")
+					w := tabwriter.NewWriter(os.Stdout, 0, 0, 4, ' ', 0)
+					for i, shift := range shifts {
+						line := fmt.Sprintf("  [%v]\t%v\t started %v \t [%v]",
+							i,
+							timeshifts.FormatProject(shift.Project),
+							shift.ClockOnTime.Format(shortTimeFormat),
+							durFormat(time.Since(shift.ClockOnTime)),
+						)
+						fmt.Fprintln(w, line)
+					}
+					w.Flush()
+					fmt.Print("\n")
 				}
 				return nil
 			},

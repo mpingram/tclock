@@ -47,7 +47,51 @@ func (dbRef DB) ClockOff(project Project) (Timeshift, error) {
 }
 
 func (dbRef DB) GetRunningShifts() ([]Timeshift, error) {
-	return []Timeshift{}, nil
+	var timeshifts []Timeshift
+	db, err := sql.Open(dbRef.DbDriver, dbRef.DbFilepath)
+	if err != nil {
+		return []Timeshift{}, nil
+	}
+	rows, err := db.Query(`
+		SELECT
+			projects.name,
+			namespaces.name,
+			timeshifts.clock_on_time
+		FROM timeshifts
+			INNER JOIN projects ON timeshifts.project_id=projects.project_id
+				LEFT JOIN namespaces ON projects.namespace_id=namespaces.namespace_id
+		WHERE timeshifts.clock_on_time IS NOT NULL 
+			AND timeshifts.clock_off_time IS NULL;
+	`)
+	if err != nil {
+		return []Timeshift{}, err
+	}
+	for rows.Next() {
+		var (
+			clockOnTimeUnix int64
+			clockOnTime     time.Time
+			name            string
+			namespace       string
+			maybeNamespace  sql.NullString
+		)
+		err = rows.Scan(&name, &maybeNamespace, &clockOnTimeUnix)
+		if err != nil {
+			return []Timeshift{}, err
+		}
+		clockOnTime = time.Unix(clockOnTimeUnix, 0)
+		if maybeNamespace.Valid == true {
+			namespace = maybeNamespace.String
+		}
+		timeshift := Timeshift{
+			Project: Project{
+				Name:      name,
+				Namespace: namespace,
+			},
+			ClockOnTime: clockOnTime,
+		}
+		timeshifts = append(timeshifts, timeshift)
+	}
+	return timeshifts, nil
 }
 
 func (dbRef DB) EditTimeshift(targetProject Project, newClockOnTime time.Time, newClockOffTime time.Time) error {
