@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"github.com/mpingram/tclock/timeshifts"
+	"os"
+	"text/tabwriter"
 	"time"
 )
 
@@ -27,4 +29,18 @@ func listTimeshifts(shifts []timeshifts.Timeshift) string {
 		}
 	}
 	return outputStr
+}
+
+func printTimeshifts(shifts []timeshifts.Timeshift) {
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 4, ' ', 0)
+	for i, shift := range shifts {
+		line := fmt.Sprintf("  [%v]\t%v\t started %v \t [%v]",
+			i,
+			timeshifts.FormatProject(shift.Project),
+			shift.ClockOnTime.Format(shortTimeFormat),
+			durFormat(time.Since(shift.ClockOnTime)),
+		)
+		fmt.Fprintln(w, line)
+	}
+	w.Flush()
 }

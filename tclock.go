@@ -5,8 +5,6 @@ import (
 	"github.com/mpingram/tclock/timeshifts"
 	"gopkg.in/urfave/cli.v1"
 	"os"
-	"text/tabwriter"
-	"time"
 )
 
 func main() {
@@ -22,7 +20,6 @@ func main() {
 	}
 
 	log := logger{}
-	shortTimeFormat := "Jan 2 3:04pm"
 
 	app := cli.NewApp()
 	app.Name = "tclock"
@@ -40,6 +37,7 @@ func main() {
 				return nil
 			},
 		},
+
 		{
 			Name:    "status",
 			Aliases: []string{"s"},
@@ -52,20 +50,8 @@ func main() {
 				case err != nil:
 					panic(err)
 				default:
-					fmt.Print("\n")
-					log.i("Running timeshifts:")
-					w := tabwriter.NewWriter(os.Stdout, 0, 0, 4, ' ', 0)
-					for i, shift := range shifts {
-						line := fmt.Sprintf("  [%v]\t%v\t started %v \t [%v]",
-							i,
-							timeshifts.FormatProject(shift.Project),
-							shift.ClockOnTime.Format(shortTimeFormat),
-							durFormat(time.Since(shift.ClockOnTime)),
-						)
-						fmt.Fprintln(w, line)
-					}
-					w.Flush()
-					fmt.Print("\n")
+					log.i("Currently running timeshifts:")
+					printTimeshifts(shifts)
 				}
 				return nil
 			},
@@ -89,17 +75,19 @@ func main() {
 				return nil
 			},
 		},
+
 		{
 			Name:  "off",
 			Usage: "End a timeshift for the specified project.",
 			Action: func(c *cli.Context) error {
-				noProject := false
-				proj, err := parseProject(c.Args().First())
-				switch {
-				case err == ErrEmptyProject:
-					noProject = true
-				case err != nil:
-					return err
+				noProjectGiven := c.Args().First() == ""
+				var proj timeshifts.Project
+				var err error
+				if noProjectGiven == false {
+					proj, err = parseProject(c.Args().First())
+					if err != nil {
+						return err
+					}
 				}
 				// get a list of all running timeshifts
 				runningShifts, err := timeshiftsDB.GetRunningShifts()
@@ -113,7 +101,7 @@ func main() {
 					return err
 				// if there is one running timeshift, and no specific project
 				//  was passed to tclock off, clock off that project
-				case len(runningShifts) == 1 && noProject == true:
+				case len(runningShifts) == 1 && noProjectGiven == true:
 					shift := runningShifts[0]
 					shift, err = timeshiftsDB.ClockOff(shift.Project)
 					if err != nil {
@@ -128,11 +116,10 @@ func main() {
 					// if there are multiple running timeshifts and no
 					//   specific project was passed to tclock off, print a
 					//   list of all running timeshifts
-				case len(runningShifts) > 1 && noProject == true:
-					outputStr := "Multiple running timeshifts:\n"
-					outputStr += listTimeshifts(runningShifts)
-					outputStr += "Clock off one of these shifts by calling tclock off <project>"
-					log.i(outputStr)
+				case len(runningShifts) > 1 && noProjectGiven == true:
+					log.i("Multiple running timeshifts:\n")
+					printTimeshifts(runningShifts)
+					log.i("Clock off one of these shifts by calling tclock off <project>")
 					return nil
 				// if a project has been passed to tclock off, clock off that project
 				//   if it's running
