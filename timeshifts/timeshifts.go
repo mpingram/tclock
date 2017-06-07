@@ -2,6 +2,7 @@ package timeshifts
 
 import (
 	"database/sql"
+	"fmt"
 	_ "github.com/mattn/go-sqlite3"
 	"time"
 )
@@ -26,7 +27,7 @@ func (dbRef DB) ClockOn(project Project, forceOverwrite bool) (Timeshift, error)
 	// if there's already a clocked-on timeshift for this project,
 	// 	and the method wasn't instructed to force overwrite it, respond
 	// 	with ErrTimeshiftAlreadyRunning
-	timeshiftAlreadyRunning, prevTimeshift, err := isTimeshiftAlreadyRunning(db, project)
+	timeshiftAlreadyRunning, prevTimeshift, err := isTimeshiftRunning(db, project)
 	if err != nil {
 		return Timeshift{}, err
 	} else if timeshiftAlreadyRunning == true && !forceOverwrite {
@@ -43,7 +44,32 @@ func (dbRef DB) ClockOn(project Project, forceOverwrite bool) (Timeshift, error)
 
 // register the end of a timeshift
 func (dbRef DB) ClockOff(project Project) (Timeshift, error) {
-	return Timeshift{}, nil
+	clockOffTime := time.Now()
+	db, err := sql.Open(dbRef.DbDriver, dbRef.DbFilepath)
+	if err != nil {
+		return Timeshift{}, err
+	}
+	timeshiftRunning, runningShift, err := isTimeshiftRunning(db, project)
+	if err != nil {
+		return Timeshift{}, err
+	}
+	if timeshiftRunning == true {
+		_, err := db.Exec(`
+			UPDATE timeshifts SET clock_off_time=? WHERE timeshift_id=?
+		`, clockOffTime, runningShift.ID)
+		if err != nil {
+			return Timeshift{}, err
+		}
+	} else {
+		return Timeshift{}, ErrNoTimeshifts
+	}
+	fmt.Println(runningShift)
+	return Timeshift{
+		ID:           runningShift.ID,
+		ClockOnTime:  runningShift.ClockOnTime,
+		ClockOffTime: clockOffTime,
+		Project:      runningShift.Project,
+	}, nil
 }
 
 func (dbRef DB) GetRunningShifts() ([]Timeshift, error) {

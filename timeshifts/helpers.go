@@ -15,7 +15,7 @@ func FormatProject(project Project) string {
 }
 
 //  checks if there is an unclosed timeshift for shift's project
-func isTimeshiftAlreadyRunning(db *sql.DB, project Project) (running bool, prevShift Timeshift, err error) {
+func isTimeshiftRunning(db *sql.DB, project Project) (running bool, prevShift Timeshift, err error) {
 	exists, projectID, err := getProjectID(db, project)
 	if exists == false {
 		return false, prevShift, nil
@@ -25,7 +25,7 @@ func isTimeshiftAlreadyRunning(db *sql.DB, project Project) (running bool, prevS
 		// search in timeshifts for first shift matching clock off time
 		// --
 		row := db.QueryRow(`
-			SELECT projects.name, namespaces.name, timeshifts.clock_on_time FROM timeshifts
+			SELECT projects.name, namespaces.name, timeshifts.clock_on_time, timeshifts.timeshift_id FROM timeshifts
 				INNER JOIN projects ON timeshifts.project_id=projects.project_id
 					LEFT JOIN namespaces ON projects.namespace_id=namespaces.namespace_id
 			WHERE timeshifts.project_id=? AND timeshifts.clock_off_time IS NULL
@@ -34,7 +34,8 @@ func isTimeshiftAlreadyRunning(db *sql.DB, project Project) (running bool, prevS
 		var name string
 		var maybeNamespace sql.NullString
 		var clockOnTimeUnix int64
-		err = row.Scan(&name, &maybeNamespace, &clockOnTimeUnix)
+		var id int64
+		err = row.Scan(&name, &maybeNamespace, &clockOnTimeUnix, &id)
 		switch {
 		case err == sql.ErrNoRows:
 			return false, prevShift, nil
@@ -49,7 +50,7 @@ func isTimeshiftAlreadyRunning(db *sql.DB, project Project) (running bool, prevS
 				proj = Project{Name: name}
 			}
 			clockOnTime := time.Unix(clockOnTimeUnix, 0)
-			prevShift = Timeshift{Project: proj, ClockOnTime: clockOnTime}
+			prevShift = Timeshift{Project: proj, ID: id, ClockOnTime: clockOnTime}
 			return true, prevShift, nil
 		}
 	}

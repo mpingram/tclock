@@ -138,6 +138,7 @@ func main() {
 						log.i("Shift %v clocked out: %v. Ran for %v [%v - %v]",
 							timeshifts.FormatProject(proj),
 							shift.ClockOffTime.Format(shortTimeFormat),
+							durFormat(shift.ClockOffTime.Sub(shift.ClockOnTime)),
 							shift.ClockOnTime.Format("03:04pm"),
 							shift.ClockOffTime.Format("03:04pm"),
 						)
@@ -146,14 +147,7 @@ func main() {
 				}
 			},
 		},
-		{
-			Name:    "status",
-			Aliases: []string{"s"},
-			Usage:   "Show the currently active timeshifts and how long they've been running.",
-			Action: func(c *cli.Context) error {
-				return nil
-			},
-		},
+
 		{
 			Name:  "report",
 			Usage: "Show a report of all timeshifts from the past week [default]. To view timeshifts for a certain project or namespace, pass that project or namespace as the first argument. To view timeshifts over a different period, pass the [-d]--duration flag set to the duration to include, which should be a number immediately followed by a unit of time, one of [(d)ay, (w)eek, (m)onth, (y)ear]. \nFor exmample, to display the past two weeks of timeshifts spent in namespace world-domination, type \n\ttclock report world-domination -d=2w\n",

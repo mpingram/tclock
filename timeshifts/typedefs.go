@@ -17,6 +17,7 @@ type DB struct {
 }
 
 type Timeshift struct {
+	ID           int64
 	Project      Project
 	ClockOnTime  time.Time
 	ClockOffTime time.Time
